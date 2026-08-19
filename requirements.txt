@@ -1,0 +1,6 @@
+playwright>=1.47
+python-dotenv>=1.0
+requests>=2.32
+tenacity>=8.5
+pyperclip>=1.9
+customtkinter>=5.2
