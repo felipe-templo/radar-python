@@ -28,12 +28,14 @@ def connect_to_chrome(cdp_url: str) -> tuple[Playwright, Browser, BrowserContext
         raise ChromeNotConnectableError("Chrome conectado, mas sem contexto/aba aberta.")
 
     context = browser.contexts[0]
-    try:
-        context.grant_permissions(
-            ["clipboard-read", "clipboard-write"],
-            origin="https://www.mercadolivre.com.br",
-        )
-    except Exception:
-        logger.warning("Nao foi possivel conceder permissao de clipboard; fallback via pyperclip")
+    for origin in (
+        "https://www.mercadolivre.com.br",
+        "https://shopee.com.br",
+        "https://affiliate.shopee.com.br",
+    ):
+        try:
+            context.grant_permissions(["clipboard-read", "clipboard-write"], origin=origin)
+        except Exception:
+            logger.warning("Nao foi possivel conceder permissao de clipboard para %s; fallback via pyperclip", origin)
 
     return pw, browser, context

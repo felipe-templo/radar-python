@@ -42,3 +42,43 @@ class ProductPageSelectors:
     SHARE_MODAL_LINK_INPUT = "textarea[data-testid='text-field__label_link']"
     SHARE_MODAL_COPY_BUTTON = "button[data-testid='copy-button__label_link']"
     COPY_LINK_ANCHOR = "a[data-testid='share-on-click_COPY_LINK']"
+
+
+class ShopeeOffersPageSelectors:
+    """Seletores da pagina de ofertas relampago da Shopee (shopee.com.br/flash_sale).
+
+    Calibrados em 2026-08-19 inspecionando o DOM real via
+    scripts/inspect_shopee_offers.py. Shopee usa classes CSS com hash de
+    build (ex.: "BlBXvx", "J0nYy6") que provavelmente mudam a cada deploy -
+    por isso o card e localizado pelo <a> que envolve o item inteiro, via
+    seu aria-label (texto de acessibilidade, mais estavel que classes).
+    Nome/desconto/preco sao extraidos direto do texto do aria-label
+    (padrao observado: "{nome} null promocao menos {desconto}% preco atual
+    R${preco} ... entrar em ofertas relampago"), nao de sub-elementos -
+    ver CARD_LABEL_PATTERN em scraper/shopee_offers_page.py. Sem selector
+    de imagem: o card nao usa <img src> para a foto do produto (e
+    background-image inline em div com classe com hash), entao image_url
+    fica sempre None pros produtos Shopee.
+    """
+
+    COOKIE_BANNER_ACCEPT = "button:has-text('Aceitar'), button:has-text('OK, entendi')"
+    OFFER_CARD = "a[aria-label*='ofertas relâmpago' i]"
+    LOAD_MORE_BUTTON = "button:has-text('Ver mais')"
+
+
+class ShopeeAffiliatePortalSelectors:
+    """Seletores do portal de afiliados Shopee (affiliate.shopee.com.br/offer/product_offer/{item_id}).
+
+    Calibrados em 2026-08-19 contra o DOM real (portal usa Ant Design -
+    classes "ant-*" sao da biblioteca, bem mais estaveis que hashes de
+    build). Fluxo confirmado: abrir a URL do item -> clicar "Obter link"
+    -> abre modal "Link de Oferta de Produto" com um
+    <textarea disabled class="ant-input"> ja preenchido com o link curto
+    (formato "https://s.shopee.com.br/XXXXXXXX"). O textarea e disabled,
+    NAO readonly - .input_value() do Playwright funciona mesmo assim.
+    """
+
+    GET_LINK_BUTTON = "button:has-text('Obter link'), button:has-text('Gerar link')"
+    LINK_MODAL_INPUT = "textarea.ant-input"
+    LINK_COPY_BUTTON = "button:has-text('Copiar')"
+    COPY_LINK_ANCHOR = "a:has-text('Copiar link')"

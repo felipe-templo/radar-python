@@ -35,12 +35,12 @@ class DedupRepository:
             ).fetchone()
             return row is not None
 
-    def mark_posted(self, product: Product, telegram_message_id: int | None) -> None:
+    def mark_posted(self, product: Product, dedup_key: str, telegram_message_id: int | None) -> None:
         with closing(self._connect()) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO posted_products VALUES (?, ?, ?, ?, ?, ?)",
                 (
-                    product.product_id,
+                    dedup_key,
                     product.name,
                     product.product_url,
                     product.discount_percent,

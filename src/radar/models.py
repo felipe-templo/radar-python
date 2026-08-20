@@ -24,3 +24,4 @@ class Product:
     discount_percent: int
     affiliate_link: str
     collected_at: datetime
+    source: str = "ml"

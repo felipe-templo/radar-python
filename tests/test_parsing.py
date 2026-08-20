@@ -4,7 +4,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from radar.parsing import compute_discount_percent, extract_product_id, parse_discount, parse_price
+from radar.parsing import (
+    compute_discount_percent,
+    extract_product_id,
+    extract_shopee_item_id,
+    parse_discount,
+    parse_price,
+)
 
 
 def test_parse_price_simple():
@@ -46,6 +52,18 @@ def test_extract_product_id():
 def test_extract_product_id_invalid():
     try:
         extract_product_id("https://example.com/nope")
+        assert False, "deveria ter lancado ValueError"
+    except ValueError:
+        pass
+
+
+def test_extract_shopee_item_id():
+    assert extract_shopee_item_id("https://shopee.com.br/Produto-Teste-i.311204486.18899837421") == "18899837421"
+
+
+def test_extract_shopee_item_id_invalid():
+    try:
+        extract_shopee_item_id("https://example.com/nope")
         assert False, "deveria ter lancado ValueError"
     except ValueError:
         pass

@@ -43,3 +43,10 @@ def test_build_message_without_original_price():
     product = make_product(original_price=None)
     msg = build_message(product)
     assert "De:" not in msg
+
+
+def test_build_message_shopee_source():
+    product = make_product(source="shopee", product_id="18899837421")
+    msg = build_message(product)
+    assert "Shopee" in msg
+    assert product.name in msg

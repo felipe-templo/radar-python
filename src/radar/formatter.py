@@ -2,6 +2,11 @@ from decimal import Decimal
 
 from radar.models import Product
 
+SOURCE_LABELS = {
+    "ml": ("\U0001F6D2", "Mercado Livre"),
+    "shopee": ("\U0001F6CD", "Shopee"),
+}
+
 
 def format_brl(value: Decimal) -> str:
     s = f"{value:,.2f}"
@@ -10,8 +15,10 @@ def format_brl(value: Decimal) -> str:
 
 
 def build_message(product: Product) -> str:
+    emoji, label = SOURCE_LABELS.get(product.source, ("", ""))
+    header_text = f"OFERTA {label}".strip()
     lines = [
-        "\U0001F525 <b>OFERTA</b> \U0001F525",
+        f"\U0001F525 <b>{header_text}</b> {emoji}".strip(),
         "",
         f"\U0001F4E6 <b>{product.name}</b>",
         "",

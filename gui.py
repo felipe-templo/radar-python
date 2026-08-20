@@ -22,10 +22,17 @@ from radar.config import load_settings
 from radar.dedup import DedupRepository
 from radar.exceptions import ChromeNotConnectableError
 from radar.logging_setup import setup_logging
-from radar.pipeline import run_cycle
+from radar.queue_repo import OfferQueue
+from radar.scheduler import run_all_sites
+from radar.sites import SITES_BY_KEY
 from radar.telegram_client import TelegramClient
 
 DEFAULT_INTERVAL_HOURS = 4
+SITE_MENU_OPTIONS = {
+    "Mercado Livre": ["ml"],
+    "Shopee": ["shopee"],
+    "Ambos": ["ml", "shopee"],
+}
 MAX_RECONNECT_BEFORE_LONG_WAIT = 5
 LONG_WAIT_SECONDS = 900
 
@@ -64,24 +71,25 @@ class RadarWorker:
     def is_running(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
 
-    def start(self, interval_seconds: int) -> None:
+    def start(self, interval_seconds: int, sites: list) -> None:
         if self.is_running():
             return
         self.stop_event.clear()
         self.thread = threading.Thread(
-            target=self._run, args=(interval_seconds,), daemon=True
+            target=self._run, args=(interval_seconds, sites), daemon=True
         )
         self.thread.start()
 
     def stop(self) -> None:
         self.stop_event.set()
 
-    def _run(self, interval_seconds: int) -> None:
+    def _run(self, interval_seconds: int, sites: list) -> None:
         logger = logging.getLogger("radar.gui")
         settings = load_settings()
         pw = browser = context = None
         reconnect_attempts = 0
         dedup = DedupRepository(settings.db_path)
+        queue = OfferQueue(settings.db_path)
         telegram = TelegramClient(settings.telegram_bot_token, settings.telegram_chat_id)
 
         self.on_state_change("running")
@@ -94,7 +102,7 @@ class RadarWorker:
                         pw, browser, context = connect_to_chrome(settings.chrome_debug_url)
                         reconnect_attempts = 0
 
-                    run_cycle(settings, context, dedup, telegram)
+                    run_all_sites(settings, context, dedup, telegram, queue, sites)
 
                 except ChromeNotConnectableError as exc:
                     reconnect_attempts += 1
@@ -103,7 +111,7 @@ class RadarWorker:
                     if reconnect_attempts >= MAX_RECONNECT_BEFORE_LONG_WAIT:
                         telegram.send_alert(
                             settings.telegram_admin_chat_id,
-                            f"Radar ML: Chrome inacessivel apos {reconnect_attempts} tentativas.",
+                            f"Radar: Chrome inacessivel apos {reconnect_attempts} tentativas.",
                         )
                         self.next_run_at = time.time() + LONG_WAIT_SECONDS
                         self.stop_event.wait(LONG_WAIT_SECONDS)
@@ -112,7 +120,7 @@ class RadarWorker:
                     logger.exception("Erro inesperado no ciclo")
                     telegram.send_alert(
                         settings.telegram_admin_chat_id,
-                        "Radar ML: erro inesperado no ciclo, verificar logs/radar.log",
+                        "Radar: erro inesperado no ciclo, verificar logs/radar.log",
                     )
 
                 self.next_run_at = time.time() + interval_seconds
@@ -178,6 +186,16 @@ class RadarApp(ctk.CTk):
         controls_card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=14)
         controls_card.pack(fill="x", padx=24, pady=8)
 
+        site_row = ctk.CTkFrame(controls_card, fg_color="transparent")
+        site_row.pack(fill="x", padx=18, pady=(16, 0))
+
+        ctk.CTkLabel(site_row, text="Site").pack(side="left")
+        self.site_selector = ctk.CTkSegmentedButton(
+            site_row, values=list(SITE_MENU_OPTIONS.keys())
+        )
+        self.site_selector.set("Mercado Livre")
+        self.site_selector.pack(side="left", padx=(8, 0))
+
         row = ctk.CTkFrame(controls_card, fg_color="transparent")
         row.pack(fill="x", padx=18, pady=16)
 
@@ -214,8 +232,11 @@ class RadarApp(ctk.CTk):
                 self._append_log("Intervalo invalido - use um numero maior que 0.")
                 return
             interval_seconds = int(hours * 3600)
+            site_keys = SITE_MENU_OPTIONS[self.site_selector.get()]
+            sites = [SITES_BY_KEY[key] for key in site_keys]
             self.interval_entry.configure(state="disabled")
-            self.worker.start(interval_seconds)
+            self.site_selector.configure(state="disabled")
+            self.worker.start(interval_seconds, sites)
 
     def _on_state_change(self, state: str):
         self.after(0, lambda: self._apply_state(state))
@@ -233,6 +254,7 @@ class RadarApp(ctk.CTk):
                 text="Iniciar", fg_color=COLOR_GREEN, hover_color="#2fb46c", state="normal"
             )
             self.interval_entry.configure(state="normal")
+            self.site_selector.configure(state="normal")
 
     def _tick_countdown(self):
         if self.worker.is_running() and self.worker.next_run_at:

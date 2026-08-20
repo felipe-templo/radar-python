@@ -33,3 +33,11 @@ def extract_product_id(url: str) -> str:
     if not match:
         raise ValueError(f"Nao foi possivel extrair ID do produto de: {url}")
     return match.group(1).replace("-", "").upper()
+
+
+def extract_shopee_item_id(url: str) -> str:
+    """Extrai o item_id de uma URL de produto Shopee (padrao .../nome-i.{shopid}.{itemid})."""
+    match = re.search(r"-i\.\d+\.(\d+)", url)
+    if not match:
+        raise ValueError(f"Nao foi possivel extrair item_id do produto Shopee de: {url}")
+    return match.group(1)
