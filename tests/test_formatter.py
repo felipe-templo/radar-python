@@ -50,3 +50,10 @@ def test_build_message_shopee_source():
     msg = build_message(product)
     assert "Shopee" in msg
     assert product.name in msg
+
+
+def test_build_message_amazon_source():
+    product = make_product(source="amazon", product_id="B08N5WRWNW")
+    msg = build_message(product)
+    assert "Amazon" in msg
+    assert product.name in msg

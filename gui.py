@@ -1,4 +1,4 @@
-"""Interface grafica do Radar de Ofertas Mercado Livre.
+"""Interface grafica do Radar de Ofertas Mercado Livre, Shopee e Amazon.
 
 Controla o mesmo loop de `src/radar/scheduler.py` (conectar ao Chrome via
 CDP, rodar ciclo, aguardar) a partir de uma janela com botao iniciar/parar,
@@ -31,7 +31,8 @@ DEFAULT_INTERVAL_HOURS = 4
 SITE_MENU_OPTIONS = {
     "Mercado Livre": ["ml"],
     "Shopee": ["shopee"],
-    "Ambos": ["ml", "shopee"],
+    "Amazon": ["amazon"],
+    "Todos": ["ml", "shopee", "amazon"],
 }
 MAX_RECONNECT_BEFORE_LONG_WAIT = 5
 LONG_WAIT_SECONDS = 900
@@ -135,7 +136,7 @@ class RadarWorker:
 class RadarApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Radar de Ofertas - Mercado Livre")
+        self.title("Radar de Ofertas")
         self.geometry("760x640")
         self.minsize(640, 520)
         self.configure(fg_color=COLOR_BG)
@@ -164,7 +165,7 @@ class RadarApp(ctk.CTk):
             header, text="Radar de Ofertas", font=ctk.CTkFont(size=22, weight="bold")
         ).pack(anchor="w")
         ctk.CTkLabel(
-            header, text="Mercado Livre -> Telegram", font=ctk.CTkFont(size=13), text_color=COLOR_GRAY
+            header, text="Mercado Livre, Shopee e Amazon -> Telegram", font=ctk.CTkFont(size=13), text_color=COLOR_GRAY
         ).pack(anchor="w")
 
         status_card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=14)

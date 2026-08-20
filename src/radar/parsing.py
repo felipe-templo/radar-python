@@ -41,3 +41,11 @@ def extract_shopee_item_id(url: str) -> str:
     if not match:
         raise ValueError(f"Nao foi possivel extrair item_id do produto Shopee de: {url}")
     return match.group(1)
+
+
+def extract_amazon_asin(url: str) -> str:
+    """Extrai o ASIN de uma URL de produto Amazon (padrao /dp/{ASIN} ou /gp/product/{ASIN})."""
+    match = re.search(r"/(?:dp|gp/product)/([A-Za-z0-9]{10})", url)
+    if not match:
+        raise ValueError(f"Nao foi possivel extrair ASIN do produto Amazon de: {url}")
+    return match.group(1).upper()

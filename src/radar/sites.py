@@ -5,7 +5,9 @@ from playwright.sync_api import BrowserContext, Page
 
 from radar.config import Settings
 from radar.models import RawOfferCard
-from radar.parsing import extract_product_id, extract_shopee_item_id
+from radar.parsing import extract_amazon_asin, extract_product_id, extract_shopee_item_id
+from radar.scraper.amazon_affiliate import get_affiliate_link as get_amazon_affiliate_link
+from radar.scraper.amazon_offers_page import list_offers as list_amazon_offers
 from radar.scraper.offers_page import list_offers as list_ml_offers
 from radar.scraper.product_page import get_affiliate_link as get_ml_affiliate_link
 from radar.scraper.shopee_affiliate import get_affiliate_link as get_shopee_affiliate_link
@@ -40,5 +42,14 @@ SHOPEE_SITE = SiteConfig(
     extract_product_id=extract_shopee_item_id,
 )
 
-ALL_SITES = [ML_SITE, SHOPEE_SITE]
+AMAZON_SITE = SiteConfig(
+    key="amazon",
+    label="Amazon",
+    emoji="\U0001F4E6",
+    list_offers=list_amazon_offers,
+    get_affiliate_link=get_amazon_affiliate_link,
+    extract_product_id=extract_amazon_asin,
+)
+
+ALL_SITES = [ML_SITE, SHOPEE_SITE, AMAZON_SITE]
 SITES_BY_KEY = {site.key: site for site in ALL_SITES}

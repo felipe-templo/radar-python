@@ -82,3 +82,59 @@ class ShopeeAffiliatePortalSelectors:
     LINK_MODAL_INPUT = "textarea.ant-input"
     LINK_COPY_BUTTON = "button:has-text('Copiar')"
     COPY_LINK_ANCHOR = "a:has-text('Copiar link')"
+
+
+class AmazonOffersPageSelectors:
+    """Seletores da pagina de ofertas do dia da Amazon (amazon.com.br/deals).
+
+    Calibrado em 2026-08-19 inspecionando o DOM real (Chrome logado,
+    scripts/inspect_amazon_offers.py + dump de HTML manual) contra
+    https://www.amazon.com.br/deals. O card e o proprio widget React de
+    produto (`data-testid="product-card"`), que traz o ASIN pronto no
+    atributo `data-asin` - mais estavel que extrair da URL, embora
+    `parsing.extract_amazon_asin` continue sendo usado a partir do
+    `product_url` no restante do pipeline (mesmo contrato dos outros
+    sites). O grid carrega os produtos de forma incremental via scroll
+    (virtualizado, so um punhado de cards fica no DOM por vez - mesmo
+    padrao ja tratado por `_load_cards`).
+
+    A secao de preco (`data-testid="price-section"`) tem dois
+    `span.a-price`: o de "Preco da Oferta" (sem a classe extra
+    `a-text-price`) e o riscado "De:" (com `a-text-price`) - por isso
+    OFFER_PRICE_DISCOUNT usa `:not(.a-text-price)` pra nao pegar o
+    riscado por engano. O badge de desconto
+    (`div[data-component="dui-badge"]`) tem dois `span.a-size-mini`: o
+    primeiro e o percentual ("42% off"), o segundo e o rotulo ("Oferta") -
+    por isso `.first` em vez de pegar todos.
+    """
+
+    COOKIE_BANNER_ACCEPT = "input#sp-cc-accept, button:has-text('Aceitar')"
+    OFFER_CARD = "div[data-testid='product-card']"
+    OFFER_LINK = "a[data-testid='product-card-link']"
+    OFFER_TITLE = "span.a-truncate-full"
+    OFFER_IMAGE = "img"
+    OFFER_PRICE_DISCOUNT = "div[data-testid='price-section'] span.a-price:not(.a-text-price) span.a-offscreen"
+    OFFER_PRICE_ORIGINAL = "div[data-testid='price-section'] span.a-price.a-text-price span.a-offscreen"
+    OFFER_DISCOUNT_BADGE = "div[data-component='dui-badge'] span.a-size-mini"
+    LOAD_MORE_BUTTON = "button:has-text('Ver mais')"
+
+
+class AmazonSiteStripeSelectors:
+    """Seletores da barra SiteStripe (Amazon Associates) na propria pagina
+    do produto.
+
+    Calibrado em 2026-08-19 contra o DOM real (Chrome logado com
+    Associates ativo, produto B09LHW62H7). Diferente do que se imaginava
+    inicialmente, o SiteStripe fica fixo no TOPO da pagina (`#nav-AssociateStripe`),
+    nao acima do rodape - e o fluxo NAO expoe o link num campo de texto:
+    clicar em "Obter link" (`#amzn-ss-get-link-button`) abre um popover
+    com radio buttons de formato (link curto/completo) e um botao
+    "Copiar link de afiliado" (`#amzn-ss-copy-affiliate-link-btn`) que
+    copia direto pro clipboard - sem nenhum <textarea>/<input> visivel
+    pra ler o valor. Confirmado que o link curto gerado usa dominio
+    `link.amazon/{codigo}` (NAO `amzn.to`, que e o encurtador antigo) -
+    ver AFFILIATE_LINK_PATTERN em amazon_affiliate.py.
+    """
+
+    GET_LINK_BUTTON = "#amzn-ss-get-link-button"
+    COPY_LINK_BUTTON = "#amzn-ss-copy-affiliate-link-btn"

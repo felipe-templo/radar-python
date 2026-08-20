@@ -11,6 +11,7 @@ class Settings:
     chrome_debug_url: str
     offers_url: str
     shopee_offers_url: str
+    amazon_offers_url: str
     check_interval_seconds: int
     max_products_per_cycle: int
     min_discount_percent: int
@@ -35,6 +36,7 @@ def load_settings() -> Settings:
         chrome_debug_url=os.getenv("CHROME_DEBUG_URL", "http://localhost:9222"),
         offers_url=os.getenv("OFFERS_URL", "https://www.mercadolivre.com.br/ofertas#nav-header"),
         shopee_offers_url=os.getenv("SHOPEE_OFFERS_URL", "https://shopee.com.br/flash_sale"),
+        amazon_offers_url=os.getenv("AMAZON_OFFERS_URL", "https://www.amazon.com.br/deals?ref_=nav_cs_gb"),
         check_interval_seconds=int(os.getenv("CHECK_INTERVAL_SECONDS", "300")),
         max_products_per_cycle=int(os.getenv("MAX_PRODUCTS_PER_CYCLE", "15")),
         min_discount_percent=int(os.getenv("MIN_DISCOUNT_PERCENT", "10")),

@@ -5,6 +5,7 @@ from radar.models import Product
 SOURCE_LABELS = {
     "ml": ("\U0001F6D2", "Mercado Livre"),
     "shopee": ("\U0001F6CD", "Shopee"),
+    "amazon": ("\U0001F4E6", "Amazon"),
 }
 
 

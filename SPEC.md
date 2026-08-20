@@ -1,28 +1,33 @@
-# Spec — Radar de Ofertas Mercado Livre + Shopee -> Telegram
+# Spec — Radar de Ofertas Mercado Livre + Shopee + Amazon -> Telegram
 
 Status: **em producao**. ML calibrado e validado contra o site real em
 2026-08-18; Shopee calibrado e validado contra o site real em 2026-08-19
 (listagem + resolucao de link de afiliado testadas de ponta a ponta, ver
-secao 6b e secao 11). Documento descreve o app como construido, nao como
-planejado.
+secao 6b e secao 11); Amazon calibrado e validado contra o site real em
+2026-08-19 (listagem + resolucao de link de afiliado via SiteStripe
+testadas de ponta a ponta, ver secao 6c e secao 11). Documento descreve o
+app como construido, nao como planejado.
 
 ## 1. Objetivo
 
 Monitorar as paginas de ofertas relampago do Mercado Livre
-(`https://www.mercadolivre.com.br/ofertas`) e da Shopee
-(`https://shopee.com.br/flash_sale`), extrair produtos com desconto, obter
+(`https://www.mercadolivre.com.br/ofertas`), da Shopee
+(`https://shopee.com.br/flash_sale`) e as ofertas do dia da Amazon
+(`https://www.amazon.com.br/deals`), extrair produtos com desconto, obter
 o link de afiliado de cada um e publicar automaticamente um anuncio
 formatado (nome, de/por, % off, link, origem) num grupo/canal do Telegram,
 em loop continuo, sem repetir produto ja postado. Ao iniciar, o usuario
-escolhe qual(is) site(s) rodar (Mercado Livre, Shopee, ou ambos).
+escolhe qual(is) site(s) rodar (Mercado Livre, Shopee, Amazon, ou todos).
 
 ## 2. Escopo e nao-escopo
 
 Dentro do escopo:
 - Leitura da pagina de ofertas (ML e Shopee) e extracao de cards de produto.
 - Captura de link de afiliado real (nao um link generico do produto) — via
-  botao "Compartilhar" na propria pagina do produto (ML) ou via portal de
-  afiliados `affiliate.shopee.com.br` (Shopee, ver secao 6b).
+  botao "Compartilhar" na propria pagina do produto (ML), via portal de
+  afiliados `affiliate.shopee.com.br` (Shopee, ver secao 6b) ou via botao
+  "Obter link" (SiteStripe do Amazon Associates) na propria pagina do
+  produto (Amazon, ver secao 6c).
 - Escolha interativa, ao iniciar (CLI `main.py` ou GUI `gui.py`), de qual(is)
   site(s) rodar nesta execucao.
 - Formatacao e envio de mensagem para um unico destino Telegram (mesmo canal
@@ -32,9 +37,10 @@ Dentro do escopo:
 - Alertas de erro para um chat Telegram de admin (opcional).
 
 Fora do escopo (nao implementado):
-- Login/autenticacao automatizada no Mercado Livre/Shopee — a sessao logada
-  e responsabilidade do usuario, mantida manualmente num Chrome externo
-  (inclusive login no portal de afiliados Shopee).
+- Login/autenticacao automatizada no Mercado Livre/Shopee/Amazon — a
+  sessao logada e responsabilidade do usuario, mantida manualmente num
+  Chrome externo (inclusive login no portal de afiliados Shopee e na
+  conta Amazon Associates).
 - Publicacao em outros canais (WhatsApp, Instagram, etc).
 - Interface web — so CLI interativa (`main.py`) e GUI desktop (`gui.py`).
 - Deteccao/tratamento de CAPTCHA — o bot so evita agir de forma robotica
@@ -148,6 +154,8 @@ posta), com uma fila SQLite compartilhada entre todos os sites
 | `src/radar/scraper/product_page.py` | Abre pagina do produto ML, clica Compartilhar, extrai o link de afiliado |
 | `src/radar/scraper/shopee_offers_page.py` | Le a listagem de ofertas relampago da Shopee, extrai `RawOfferCard` |
 | `src/radar/scraper/shopee_affiliate.py` | Abre o item no portal de afiliados Shopee, clica Obter link, extrai o link |
+| `src/radar/scraper/amazon_offers_page.py` | Le a pagina de ofertas do dia da Amazon, faz scroll incremental, extrai `RawOfferCard` |
+| `src/radar/scraper/amazon_affiliate.py` | Abre a pagina do produto Amazon, clica "Obter link"/"Copiar link de afiliado" (SiteStripe), le o link do clipboard |
 | `src/radar/parsing.py` | Parsing de preco (`R$ 1.234,56` -> `Decimal`), % desconto, ID do produto (ML e Shopee) |
 | `src/radar/models.py` | `RawOfferCard` (dado cru do card) e `Product` (dado final, com afiliado e `source`) |
 | `src/radar/formatter.py` | Monta o texto HTML da mensagem do Telegram, com emoji/rotulo por origem |
@@ -159,6 +167,7 @@ posta), com uma fila SQLite compartilhada entre todos os sites
 | `src/radar/exceptions.py` | `ChromeNotConnectableError`, `AffiliateLinkNotFoundError` |
 | `scripts/inspect_offers.py` | Script manual pra recalibrar `selectors.py` (ML) quando o site mudar |
 | `scripts/inspect_shopee_offers.py` | Script manual pra recalibrar `selectors.py` (Shopee) quando o site mudar |
+| `scripts/inspect_amazon_offers.py` | Script manual pra calibrar/recalibrar `selectors.py` (Amazon) — ver secao 6c |
 
 ## 5. Fluxo de dados por produto
 
@@ -267,12 +276,62 @@ Implementado em `src/radar/scraper/shopee_affiliate.py`. Passos:
    produto (nao marca como postado, tenta de novo no proximo ciclo).
 7. A aba e sempre fechada no `finally`, mesmo em erro.
 
+## 6c. Captura do link de afiliado — Amazon
+
+Calibrado e validado de ponta a ponta contra o DOM real em 2026-08-19
+(Chrome logado com sessao Amazon Associates ativa, ciclo completo de
+`discover_offers` + `process_queue` rodado contra
+`amazon.com.br/deals` em `DRY_RUN`, ver secao 11). Implementado em
+`src/radar/scraper/amazon_offers_page.py` (listagem) e
+`src/radar/scraper/amazon_affiliate.py` (afiliado). Passos:
+
+1. `list_offers` abre `AMAZON_OFFERS_URL` (padrao: pagina de ofertas do
+   dia, `amazon.com.br/deals`) e localiza os cards via
+   `div[data-testid="product-card"]` — o widget React de produto, que ja
+   traz o ASIN pronto no atributo `data-asin`. O grid e virtualizado (so
+   um punhado de cards fica montado no DOM por vez, o resto entra/sai
+   conforme rola), por isso o mesmo scroll incremental de ML/Shopee
+   (`_load_cards`) e usado, com dedupe por ASIN pra nao repetir produto
+   entre leituras.
+2. Preco atual vem de `div[data-testid="price-section"]
+   span.a-price:not(.a-text-price) span.a-offscreen`; o preco original
+   riscado (quando existe) do mesmo container mas com a classe extra
+   `.a-text-price`. O badge de desconto
+   (`div[data-component="dui-badge"] span.a-size-mini`, primeiro span —
+   o segundo e so o rotulo "Oferta") da o percentual direto; se ausente,
+   cai pro fallback `parsing.compute_discount_percent` (mesmo do ML).
+3. `get_affiliate_link` abre o produto numa nova aba. **Confirmado**: a
+   barra SiteStripe fica fixa no TOPO da pagina
+   (`#nav-AssociateStripe`), nao acima do rodape como se imaginava antes
+   de calibrar. Clicar em "Obter link" (`#amzn-ss-get-link-button`) abre
+   um popover com radio buttons de formato (link curto/completo) e um
+   botao "Copiar link de afiliado"
+   (`#amzn-ss-copy-affiliate-link-btn`) que copia o link **direto pro
+   clipboard** — diferente de ML/Shopee, nao ha nenhum `<textarea>` ou
+   `<input>` visivel com o valor pra ler via DOM, entao a unica camada
+   real de extracao e clipboard: primeiro `navigator.clipboard.readText()`
+   da propria pagina, com fallback pro clipboard do sistema operacional
+   via `pyperclip` (exige janela do Chrome visivel).
+4. **Confirmado**: o link curto gerado usa o dominio `link.amazon/{codigo}`
+   (ex.: `https://link.amazon/B0h5jcXcC`), NAO `amzn.to` (encurtador
+   antigo da Amazon, mantido no regex de validacao como fallback).
+   `_looks_like_affiliate_link()` usa
+   `link\.amazon/|amzn\.to/|tag=|linkCode=`.
+5. `AffiliateLinkNotFoundError` se nada validar; a aba e sempre fechada no
+   `finally`.
+
+`extract_amazon_asin` (`src/radar/parsing.py`) extrai o ASIN via regex
+`/(?:dp|gp/product)/([A-Za-z0-9]{10})` a partir do `product_url`, usado
+como `product_id` (chave de dedup `"amazon:{ASIN}"`, mesmo esquema de
+prefixo por site da secao 7).
+
 ## 7. Deduplicacao
 
 SQLite (`data/posted_products.db`), tabela `posted_products` com
 `product_id TEXT PRIMARY KEY` (na pratica, chave prefixada por site —
-`"ml:MLB123..."` / `"shopee:18899..."` — pra nao colidir entre
-marketplaces; ver `pipeline.process_queue`). Escolhido em vez de JSON por
+`"ml:MLB123..."` / `"shopee:18899..."` / `"amazon:B08N5WRWNW"` — pra nao
+colidir entre marketplaces; ver `pipeline.process_queue`). Escolhido em
+vez de JSON por
 atomicidade (escrita corrompida em crash no meio de um `INSERT` nao
 acontece com `INSERT OR REPLACE` + `commit`) e custo de consulta O(log n)
 indexado. Nao ha expiracao — um produto postado uma vez nunca e repostado,
@@ -288,6 +347,7 @@ mesmo que o desconto mude.
 | `CHROME_DEBUG_URL` | nao | `http://localhost:9222` | Endpoint CDP do Chrome ja aberto |
 | `OFFERS_URL` | nao | pagina de ofertas do ML | URL alvo do scraping (ML) |
 | `SHOPEE_OFFERS_URL` | nao | `https://shopee.com.br/flash_sale` | URL alvo do scraping (Shopee) |
+| `AMAZON_OFFERS_URL` | nao | `https://www.amazon.com.br/deals?ref_=nav_cs_gb` | URL alvo do scraping (Amazon, ofertas do dia) |
 | `CHECK_INTERVAL_SECONDS` | nao | `300` | Intervalo entre ciclos |
 | `MAX_PRODUCTS_PER_CYCLE` | nao | `15` | Teto de produtos novos processados por ciclo |
 | `MIN_DISCOUNT_PERCENT` | nao | `10` | Filtro minimo de desconto pra postar |
@@ -342,6 +402,17 @@ mesmo que o desconto mude.
 - **Sem rotacao/expiracao de dedup**: a base de produtos postados cresce
   indefinidamente (irrelevante em volume — poucos KB por milhares de
   produtos).
+- **Amazon depende de sessao Associates ativa**: `get_affiliate_link` so
+  funciona se a conta logada no Chrome de debug tiver Amazon Associates
+  ativo (a barra SiteStripe so aparece nesse caso). Sem isso,
+  `#amzn-ss-get-link-button` nao existe no DOM e o item cai em
+  `AffiliateLinkNotFoundError` (retry ate `MAX_ATTEMPTS`, ver secao 9).
+- **Grid de ofertas da Amazon e virtualizado**: `product-card` sai/entra
+  do DOM conforme rola (so um punhado fica montado por vez), diferente do
+  ML/Shopee onde os cards ja lidos permanecem no DOM. O dedupe por ASIN em
+  `amazon_offers_page.py` cobre o caso de reler o mesmo produto entre
+  leituras, mas se a Amazon mudar esse comportamento de virtualizacao,
+  vale reconferir com `scripts/inspect_amazon_offers.py`.
 
 ## 11. Validacao realizada
 
@@ -385,6 +456,33 @@ mesmo que o desconto mude.
   cada ciclo (`context.new_page()` / `page.close()` dentro da propria
   chamada), mesmo padrao ja usado pra paginas de produto — nenhuma aba
   fica aberta por mais que a duracao de uma chamada.
+- **Amazon calibrado e validado em 2026-08-19** contra o site real (Chrome
+  com `--remote-debugging-port`, logado na Amazon com Amazon Associates
+  ativo):
+  - `list_offers` extraiu 24 ofertas reais de `amazon.com.br/deals`
+    (nome, `%` desconto, preco atual, preco original quando presente,
+    URL do produto — todos corretos, incluindo acentuacao/UTF-8 real,
+    confirmado via `repr()` — o mojibake visto no console era so
+    limitacao de codepage do terminal Windows, nao corrupcao de dados).
+  - `get_affiliate_link` resolveu o link de afiliado real de dois
+    produtos distintos de ponta a ponta (`https://link.amazon/...`, link
+    unico por produto).
+  - Ciclo completo (`discover_offers` + `process_queue`, `DRY_RUN=true`)
+    rodado contra o site real: 24 ofertas descobertas, 19 enfileiradas
+    (5 abaixo de `MIN_DISCOUNT_PERCENT`), processamento sem erro,
+    mensagem formatada corretamente (nome, de/por, % off, link, emoji de
+    origem).
+  - **2 achados corrigidos durante a calibracao** (a implementacao
+    inicial era best-effort, sem acesso ao DOM real): (1) `OFFER_CARD`
+    apontava para `a[href*='/dp/']` com uma heuristica de ancestor via
+    xpath — trocado por `div[data-testid="product-card"]` (o card real,
+    com ASIN pronto em `data-asin`); (2) a suposicao inicial de que o
+    botao "Obter link" ficava acima do rodape e copiava direto era
+    parcialmente errada — o botao (`#amzn-ss-get-link-button`) fica fixo
+    no TOPO da pagina e so abre um popover; o link so e copiado ao
+    clicar num segundo botao dentro do popover
+    (`#amzn-ss-copy-affiliate-link-btn`), e o dominio do link curto
+    gerado e `link.amazon/` (nao `amzn.to`, que era a suposicao inicial).
 - **Fila e isolamento entre sites adicionados em 2026-08-19** (ver secao
   3b), pra dois problemas reais: uma excecao nao tratada processando um
   produto de um site podia pular o(s) site(s) seguinte(s) no mesmo ciclo;

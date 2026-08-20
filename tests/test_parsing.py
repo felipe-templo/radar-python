@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from radar.parsing import (
     compute_discount_percent,
+    extract_amazon_asin,
     extract_product_id,
     extract_shopee_item_id,
     parse_discount,
@@ -64,6 +65,21 @@ def test_extract_shopee_item_id():
 def test_extract_shopee_item_id_invalid():
     try:
         extract_shopee_item_id("https://example.com/nope")
+        assert False, "deveria ter lancado ValueError"
+    except ValueError:
+        pass
+
+
+def test_extract_amazon_asin():
+    assert (
+        extract_amazon_asin("https://www.amazon.com.br/Produto-Exemplo/dp/B08N5WRWNW/ref=sr_1_1")
+        == "B08N5WRWNW"
+    )
+
+
+def test_extract_amazon_asin_invalid():
+    try:
+        extract_amazon_asin("https://example.com/nope")
         assert False, "deveria ter lancado ValueError"
     except ValueError:
         pass

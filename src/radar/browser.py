@@ -32,6 +32,7 @@ def connect_to_chrome(cdp_url: str) -> tuple[Playwright, Browser, BrowserContext
         "https://www.mercadolivre.com.br",
         "https://shopee.com.br",
         "https://affiliate.shopee.com.br",
+        "https://www.amazon.com.br",
     ):
         try:
             context.grant_permissions(["clipboard-read", "clipboard-write"], origin=origin)
