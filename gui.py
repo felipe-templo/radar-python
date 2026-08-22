@@ -7,7 +7,9 @@ outra forma de rodar o mesmo bot.
 """
 
 import logging
+import math
 import queue
+import re
 import sys
 import threading
 import time
@@ -40,12 +42,40 @@ LONG_WAIT_SECONDS = 900
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-COLOR_BG = "#1a1d23"
-COLOR_CARD = "#22262e"
-COLOR_ACCENT = "#3d8bfd"
-COLOR_GREEN = "#3ddc84"
-COLOR_GRAY = "#6b7280"
-COLOR_RED = "#ef4444"
+COLORS = {
+    "bg": "#14161b",
+    "surface_1": "#1c1f26",
+    "surface_2": "#242832",
+    "border": "#2e333d",
+    "accent": "#5b8cff",
+    "accent_hover": "#4a76e0",
+    "success": "#3ddc84",
+    "success_hover": "#2fb46c",
+    "warning": "#f5a623",
+    "danger": "#ef4444",
+    "danger_hover": "#c93838",
+    "muted": "#7b8394",
+    "text_primary": "#eef1f6",
+    "text_secondary": "#9aa2b1",
+}
+
+FONT_TITLE = ("Segoe UI", 22, "bold")
+FONT_SUBTITLE = ("Segoe UI", 13, "normal")
+FONT_SECTION = ("Segoe UI", 12, "bold")
+FONT_BODY = ("Segoe UI", 13, "normal")
+FONT_MONO = ("Consolas", 12, "normal")
+
+_LEVEL_RE = re.compile(r"\[(\w+)\]")
+
+
+def _blend(color_a: str, color_b: str, t: float) -> str:
+    """Interpola linear entre duas cores hex #RRGGBB, t em [0, 1]."""
+    ra, ga, ba = int(color_a[1:3], 16), int(color_a[3:5], 16), int(color_a[5:7], 16)
+    rb, gb, bb = int(color_b[1:3], 16), int(color_b[3:5], 16), int(color_b[5:7], 16)
+    r = int(ra + (rb - ra) * t)
+    g = int(ga + (gb - ga) * t)
+    b = int(ba + (bb - ba) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 class QueueLogHandler(logging.Handler):
@@ -139,10 +169,12 @@ class RadarApp(ctk.CTk):
         self.title("Radar de Ofertas")
         self.geometry("760x640")
         self.minsize(640, 520)
-        self.configure(fg_color=COLOR_BG)
+        self.configure(fg_color=COLORS["bg"])
 
         self.log_queue: queue.Queue = queue.Queue()
         self.worker = RadarWorker(self.log_queue, self._on_state_change)
+        self._pulse_job: str | None = None
+        self._pulse_t = 0.0
         self._build_layout()
 
         setup_logging(level="INFO")
@@ -162,37 +194,60 @@ class RadarApp(ctk.CTk):
         header.pack(fill="x", padx=24, pady=(20, 8))
 
         ctk.CTkLabel(
-            header, text="Radar de Ofertas", font=ctk.CTkFont(size=22, weight="bold")
+            header, text="📡 Radar de Ofertas", font=ctk.CTkFont(*FONT_TITLE),
+            text_color=COLORS["text_primary"],
         ).pack(anchor="w")
         ctk.CTkLabel(
-            header, text="Mercado Livre, Shopee e Amazon -> Telegram", font=ctk.CTkFont(size=13), text_color=COLOR_GRAY
+            header, text="Mercado Livre, Shopee e Amazon -> Telegram",
+            font=ctk.CTkFont(*FONT_SUBTITLE), text_color=COLORS["text_secondary"],
         ).pack(anchor="w")
 
-        status_card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=14)
+        status_card = ctk.CTkFrame(
+            self, fg_color=COLORS["surface_1"], corner_radius=16,
+            border_width=1, border_color=COLORS["border"],
+        )
         status_card.pack(fill="x", padx=24, pady=8)
 
-        status_row = ctk.CTkFrame(status_card, fg_color="transparent")
-        status_row.pack(fill="x", padx=18, pady=(16, 6))
+        ctk.CTkLabel(
+            status_card, text="Status", font=ctk.CTkFont(*FONT_SECTION),
+            text_color=COLORS["text_secondary"],
+        ).pack(anchor="w", padx=18, pady=(14, 0))
 
-        self.status_dot = ctk.CTkLabel(status_row, text="●", text_color=COLOR_GRAY, font=ctk.CTkFont(size=18))
+        status_row = ctk.CTkFrame(status_card, fg_color="transparent")
+        status_row.pack(fill="x", padx=18, pady=(6, 6))
+
+        self.status_dot = ctk.CTkLabel(status_row, text="●", text_color=COLORS["muted"], font=ctk.CTkFont(size=20))
         self.status_dot.pack(side="left")
-        self.status_label = ctk.CTkLabel(status_row, text="Parado", font=ctk.CTkFont(size=15, weight="bold"))
+        self.status_label = ctk.CTkLabel(
+            status_row, text="Parado", font=ctk.CTkFont(*FONT_SECTION), text_color=COLORS["text_primary"],
+        )
         self.status_label.pack(side="left", padx=(6, 0))
 
         self.countdown_label = ctk.CTkLabel(
-            status_card, text="Proxima verificacao: --:--:--", text_color=COLOR_GRAY
+            status_card, text="Proxima verificacao: --:--:--",
+            text_color=COLORS["text_secondary"], font=ctk.CTkFont(family="Consolas", size=13),
         )
         self.countdown_label.pack(anchor="w", padx=18, pady=(0, 16))
 
-        controls_card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=14)
+        controls_card = ctk.CTkFrame(
+            self, fg_color=COLORS["surface_1"], corner_radius=16,
+            border_width=1, border_color=COLORS["border"],
+        )
         controls_card.pack(fill="x", padx=24, pady=8)
 
-        site_row = ctk.CTkFrame(controls_card, fg_color="transparent")
-        site_row.pack(fill="x", padx=18, pady=(16, 0))
+        ctk.CTkLabel(
+            controls_card, text="Configuracao", font=ctk.CTkFont(*FONT_SECTION),
+            text_color=COLORS["text_secondary"],
+        ).pack(anchor="w", padx=18, pady=(14, 0))
 
-        ctk.CTkLabel(site_row, text="Site").pack(side="left")
+        site_row = ctk.CTkFrame(controls_card, fg_color="transparent")
+        site_row.pack(fill="x", padx=18, pady=(10, 0))
+
+        ctk.CTkLabel(site_row, text="Site", font=ctk.CTkFont(*FONT_BODY), text_color=COLORS["text_primary"]).pack(side="left")
         self.site_selector = ctk.CTkSegmentedButton(
-            site_row, values=list(SITE_MENU_OPTIONS.keys())
+            site_row, values=list(SITE_MENU_OPTIONS.keys()),
+            selected_color=COLORS["accent"], selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["surface_2"], unselected_hover_color=COLORS["surface_2"],
         )
         self.site_selector.set("Mercado Livre")
         self.site_selector.pack(side="left", padx=(8, 0))
@@ -200,25 +255,41 @@ class RadarApp(ctk.CTk):
         row = ctk.CTkFrame(controls_card, fg_color="transparent")
         row.pack(fill="x", padx=18, pady=16)
 
-        ctk.CTkLabel(row, text="Intervalo (horas)").pack(side="left")
-        self.interval_entry = ctk.CTkEntry(row, width=60, justify="center")
+        ctk.CTkLabel(row, text="Intervalo (horas)", font=ctk.CTkFont(*FONT_BODY), text_color=COLORS["text_primary"]).pack(side="left")
+        self.interval_entry = ctk.CTkEntry(
+            row, width=60, justify="center", fg_color=COLORS["surface_2"],
+            border_color=COLORS["border"], border_width=1, corner_radius=8,
+        )
         self.interval_entry.insert(0, str(DEFAULT_INTERVAL_HOURS))
         self.interval_entry.pack(side="left", padx=(8, 24))
 
         self.toggle_button = ctk.CTkButton(
-            row, text="Iniciar", fg_color=COLOR_GREEN, hover_color="#2fb46c",
-            text_color="#0e1512", font=ctk.CTkFont(weight="bold"),
+            row, text="Iniciar", width=110, corner_radius=10,
+            fg_color=COLORS["success"], hover_color=COLORS["success_hover"],
+            text_color="#0e1512", font=ctk.CTkFont(*FONT_SECTION),
             command=self._toggle,
         )
         self.toggle_button.pack(side="right")
 
-        log_card = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=14)
+        log_card = ctk.CTkFrame(
+            self, fg_color=COLORS["surface_1"], corner_radius=16,
+            border_width=1, border_color=COLORS["border"],
+        )
         log_card.pack(fill="both", expand=True, padx=24, pady=(8, 20))
 
-        ctk.CTkLabel(log_card, text="Log", text_color=COLOR_GRAY).pack(anchor="w", padx=18, pady=(14, 0))
-        self.log_box = ctk.CTkTextbox(log_card, fg_color="#14171c", font=ctk.CTkFont(family="Consolas", size=12))
-        self.log_box.pack(fill="both", expand=True, padx=18, pady=(4, 16))
+        ctk.CTkLabel(
+            log_card, text="Log", font=ctk.CTkFont(*FONT_SECTION), text_color=COLORS["text_secondary"],
+        ).pack(anchor="w", padx=18, pady=(14, 0))
+        self.log_box = ctk.CTkTextbox(
+            log_card, fg_color=COLORS["bg"], corner_radius=10,
+            border_width=1, border_color=COLORS["border"], font=ctk.CTkFont(*FONT_MONO),
+        )
+        self.log_box.pack(fill="both", expand=True, padx=18, pady=(8, 16))
         self.log_box.configure(state="disabled")
+        self.log_box.tag_config("INFO", foreground=COLORS["text_secondary"])
+        self.log_box.tag_config("WARNING", foreground=COLORS["warning"])
+        self.log_box.tag_config("ERROR", foreground=COLORS["danger"])
+        self.log_box.tag_config("CRITICAL", foreground=COLORS["danger"])
 
     def _toggle(self):
         if self.worker.is_running():
@@ -244,18 +315,45 @@ class RadarApp(ctk.CTk):
 
     def _apply_state(self, state: str):
         if state == "running":
-            self.status_dot.configure(text_color=COLOR_GREEN)
             self.status_label.configure(text="Rodando")
-            self.toggle_button.configure(text="Parar", fg_color=COLOR_RED, hover_color="#c93838", state="normal")
+            self.toggle_button.configure(text="Parar", state="normal")
+            self._animate_color(self.toggle_button, "fg_color", COLORS["success"], COLORS["danger"])
+            self._animate_color(self.toggle_button, "hover_color", COLORS["success_hover"], COLORS["danger_hover"])
+            self._start_pulse()
         else:
-            self.status_dot.configure(text_color=COLOR_GRAY)
+            self._stop_pulse()
+            self.status_dot.configure(text_color=COLORS["muted"])
             self.status_label.configure(text="Parado")
             self.countdown_label.configure(text="Proxima verificacao: --:--:--")
-            self.toggle_button.configure(
-                text="Iniciar", fg_color=COLOR_GREEN, hover_color="#2fb46c", state="normal"
-            )
+            self.toggle_button.configure(text="Iniciar", state="normal")
+            self._animate_color(self.toggle_button, "fg_color", COLORS["danger"], COLORS["success"])
+            self._animate_color(self.toggle_button, "hover_color", COLORS["danger_hover"], COLORS["success_hover"])
             self.interval_entry.configure(state="normal")
             self.site_selector.configure(state="normal")
+
+    def _start_pulse(self):
+        if self._pulse_job is not None:
+            return
+        self._pulse_t = 0.0
+        self._pulse_status_dot()
+
+    def _stop_pulse(self):
+        if self._pulse_job is not None:
+            self.after_cancel(self._pulse_job)
+            self._pulse_job = None
+
+    def _pulse_status_dot(self):
+        self._pulse_t += 0.12
+        factor = (math.sin(self._pulse_t) + 1) / 2
+        color = _blend(COLORS["success_hover"], COLORS["success"], factor)
+        self.status_dot.configure(text_color=color)
+        self._pulse_job = self.after(50, self._pulse_status_dot)
+
+    def _animate_color(self, widget, option: str, start_hex: str, end_hex: str, steps: int = 8, delay: int = 25, i: int = 0):
+        t = i / steps
+        widget.configure(**{option: _blend(start_hex, end_hex, t)})
+        if i < steps:
+            self.after(delay, lambda: self._animate_color(widget, option, start_hex, end_hex, steps, delay, i + 1))
 
     def _tick_countdown(self):
         if self.worker.is_running() and self.worker.next_run_at:
@@ -275,8 +373,14 @@ class RadarApp(ctk.CTk):
         self.after(200, self._poll_log_queue)
 
     def _append_log(self, line: str):
+        match = _LEVEL_RE.search(line)
+        level = match.group(1) if match else "INFO"
+        tag = level if level in ("INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
+
         self.log_box.configure(state="normal")
+        start = self.log_box.index("end")
         self.log_box.insert("end", line + "\n")
+        self.log_box.tag_add(tag, start, "end")
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
 
