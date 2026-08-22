@@ -6,3 +6,8 @@ __pycache__/
 data/
 logs/
 .pytest_cache/
+
+backend/target/
+backend/logs/
+
+.idea/

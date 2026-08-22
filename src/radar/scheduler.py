@@ -66,6 +66,21 @@ def run_all_sites(
         )
 
 
+def run_once(settings: Settings, sites: list[SiteConfig]) -> None:
+    """Conecta no Chrome, roda um unico ciclo (descoberta + fila) e fecha a
+    conexao. Usado por execucoes disparadas sob demanda (ex.: via API), ao
+    contrario de run_forever que fica em loop ate Ctrl+C."""
+    dedup = DedupRepository(settings.db_path)
+    queue = OfferQueue(settings.db_path)
+    telegram = TelegramClient(settings.telegram_bot_token, settings.telegram_chat_id)
+
+    pw, browser, context = connect_to_chrome(settings.chrome_debug_url)
+    try:
+        run_all_sites(settings, context, dedup, telegram, queue, sites)
+    finally:
+        pw.stop()
+
+
 def run_forever(settings: Settings, sites: list[SiteConfig]) -> None:
     pw = browser = context = None
     reconnect_attempts = 0

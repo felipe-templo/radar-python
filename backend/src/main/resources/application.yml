@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+radar:
+  python-executable: ${RADAR_PYTHON_EXE:C:/Users/INTEL/Documents/code/radar-python/.venv/Scripts/python.exe}
+  project-dir: ${RADAR_PROJECT_DIR:C:/Users/INTEL/Documents/code/radar-python}
+  db-path: ${RADAR_DB_PATH:C:/Users/INTEL/Documents/code/radar-python/data/posted_products.db}
+  log-dir: ${RADAR_LOG_DIR:./logs}

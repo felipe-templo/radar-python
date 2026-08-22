@@ -34,6 +34,19 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json()
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=20))
+    def send_message(self, text: str, chat_id: str | None = None) -> dict:
+        """Envia mensagem de texto livre (HTML) para o chat informado, ou
+        para o chat principal (self.chat_id) se nao informado. Usado para
+        mensagens personalizadas, fora do fluxo de ofertas."""
+        resp = requests.post(
+            f"{self.base_url}/sendMessage",
+            data={"chat_id": chat_id or self.chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def _send_text(self, caption: str) -> requests.Response:
         return requests.post(
             f"{self.base_url}/sendMessage",
