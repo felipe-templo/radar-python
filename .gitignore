@@ -1,13 +1,26 @@
+# Python
 .venv/
 venv/
 __pycache__/
 *.pyc
-.env
-data/
-logs/
 .pytest_cache/
 
+# Config/segredos (nunca commitar)
+.env
+
+# Dados/logs gerados em runtime
+data/
+logs/
+
+# Backend Java
 backend/target/
 backend/logs/
 
+# IDEs
 .idea/
+*.iml
+.vscode/
+
+# SO
+.DS_Store
+Thumbs.db

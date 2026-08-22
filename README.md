@@ -10,6 +10,18 @@ Status: **em producao**, seletores dos 3 sites calibrados e validados
 contra o site real. Ver [`SPEC.md`](SPEC.md) para a especificacao completa
 (arquitetura, fluxo de dados, tratamento de erros, riscos).
 
+**3 formas de rodar** (todas usam o mesmo motor por baixo — ver
+`src/radar/scheduler.py`):
+
+| Forma | Uso | Guia |
+|---|---|---|
+| `python main.py` | Linha de comando, loop continuo, pergunta qual(is) site(s) | secao 6 abaixo |
+| `python gui.py` | Interface grafica desktop, mesmo loop | secao 6 abaixo |
+| API HTTP (Java) | Disparar ciclos sob demanda, consultar produtos capturados, mandar mensagem avulsa | [API HTTP](#api-http-backend-java-opcional) abaixo |
+
+Nas 3 formas, o pre-requisito e o mesmo: Chrome aberto manualmente com
+debug port (secao 1).
+
 ## Como funciona
 
 O script NAO abre nem loga um navegador sozinho. Ele se conecta a um Chrome
@@ -132,6 +144,39 @@ continuo, checando a pagina de ofertas de cada site escolhido a cada
 enviados (controle em `data/posted_products.db`, chave prefixada por site).
 `Ctrl+C` encerra graciosamente.
 
+## API HTTP (backend Java, opcional)
+
+Alem de CLI e GUI, existe uma API REST (`backend/`, Spring Boot) que
+controla o `main.py` como subprocesso — util pra disparar ciclos sob
+demanda (em vez do loop fixo de `CHECK_INTERVAL_SECONDS`), escolher
+sites/quantidade/canal por chamada, e consultar os produtos ja
+capturados sem abrir o SQLite na mao.
+
+```powershell
+cd backend
+mvn spring-boot:run
+```
+
+Abre `http://localhost:8080` (redireciona pro Swagger, com todos os
+endpoints documentados e testaveis ali mesmo). Mesmo pre-requisito das
+outras 2 formas: Chrome de debug aberto (secao 1).
+
+Endpoints principais — detalhes completos em [`backend/README.md`](backend/README.md):
+
+- `POST /api/radar/run` — dispara 1 ciclo (`main.py --once`) com
+  `sites`/`quantity`/`channel` escolhidos na chamada.
+- `GET /api/radar/status` / `POST /api/radar/stop` — acompanha ou
+  interrompe a execucao atual.
+- `GET /api/products/recent` / `GET /api/products/queue-stats` — le o
+  que ja foi capturado (SQLite), sem rodar nada.
+- `POST /api/telegram/message` — manda uma mensagem avulsa (nao ligada a
+  oferta nenhuma) pro Telegram.
+
+Essa API nao substitui `main.py`/`gui.py` nem muda o comportamento deles
+— e so mais uma forma de disparar o mesmo motor (`scheduler`/`pipeline`)
+de fora, via HTTP. `WHATSAPP` ja aparece como opcao de canal na API mas
+retorna erro (ainda nao implementado no lado Python).
+
 ## Aviso: Chrome aberto por este agente
 
 Se o Claude abriu o Chrome de debug pra voce (via comando no terminal desta
@@ -179,6 +224,7 @@ src/radar/
 scripts/inspect_offers.py          calibracao manual de seletores (ML)
 scripts/inspect_shopee_offers.py   calibracao manual de seletores (Shopee)
 scripts/inspect_amazon_offers.py   calibracao manual de seletores (Amazon)
+backend/                           API HTTP (Spring Boot) que controla main.py como subprocesso — ver backend/README.md
 SPEC.md                            especificacao completa do app (arquitetura, fluxo, riscos)
 ```
 

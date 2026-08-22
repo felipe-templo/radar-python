@@ -5,8 +5,10 @@ Status: **em producao**. ML calibrado e validado contra o site real em
 (listagem + resolucao de link de afiliado testadas de ponta a ponta, ver
 secao 6b e secao 11); Amazon calibrado e validado contra o site real em
 2026-08-19 (listagem + resolucao de link de afiliado via SiteStripe
-testadas de ponta a ponta, ver secao 6c e secao 11). Documento descreve o
-app como construido, nao como planejado.
+testadas de ponta a ponta, ver secao 6c e secao 11). Backend HTTP (Java)
+adicionado em 2026-08-21 como camada de controle opcional sobre o mesmo
+motor (ver secao 12). Documento descreve o app como construido, nao como
+planejado.
 
 ## 1. Objetivo
 
@@ -41,8 +43,12 @@ Fora do escopo (nao implementado):
   sessao logada e responsabilidade do usuario, mantida manualmente num
   Chrome externo (inclusive login no portal de afiliados Shopee e na
   conta Amazon Associates).
-- Publicacao em outros canais (WhatsApp, Instagram, etc).
-- Interface web — so CLI interativa (`main.py`) e GUI desktop (`gui.py`).
+- Publicacao em outros canais alem do Telegram — `WHATSAPP` ja existe
+  como valor de enum na API HTTP (secao 12), mas retorna erro (400): sem
+  implementacao real do lado Python ainda.
+- Reimplementacao do scraper em outra linguagem — o backend Java (secao
+  12) e uma camada de controle/orquestracao por cima do Python via
+  subprocess, nao um substituto do motor Playwright/CDP.
 - Deteccao/tratamento de CAPTCHA — o bot so evita agir de forma robotica
   (jitter), nao resolve bloqueios ativos.
 
@@ -144,7 +150,7 @@ posta), com uma fila SQLite compartilhada entre todos os sites
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `main.py` | Entrypoint CLI: carrega config, pergunta qual(is) site(s) rodar, configura logging, chama `run_forever` |
+| `main.py` | Entrypoint CLI: sem args, pergunta qual(is) site(s) rodar e chama `run_forever` (comportamento original). Com args (`--sites`, `--quantity`, `--once`, `--channel`, `--message`/`--chat-id`), roda nao-interativo — usado pelo backend Java (secao 12) |
 | `gui.py` | Entrypoint GUI (customtkinter): mesmo loop, com seletor de site(s) e botao iniciar/parar |
 | `src/radar/config.py` | Le `.env` -> `Settings` (dataclass imutavel) |
 | `src/radar/browser.py` | Conecta a um Chrome ja aberto via CDP; concede permissao de clipboard (ML e Shopee) |
@@ -163,7 +169,7 @@ posta), com uma fila SQLite compartilhada entre todos os sites
 | `src/radar/dedup.py` | Repositorio SQLite: `is_posted(key)` / `mark_posted(product, dedup_key, ...)` |
 | `src/radar/queue_repo.py` | `OfferQueue`: fila SQLite compartilhada entre sites, intercalada round-robin (ver secao 3b) |
 | `src/radar/pipeline.py` | `discover_offers` (lista+filtra+enfileira, por site) e `process_queue` (drena fila, resolve afiliado, formata, envia, marca) |
-| `src/radar/scheduler.py` | `run_all_sites` (descoberta isolada por site + drena fila) dentro do loop infinito de `run_forever`, reconexao ao Chrome, backoff, alertas |
+| `src/radar/scheduler.py` | `run_all_sites` (descoberta isolada por site + drena fila); `run_forever` roda em loop infinito com reconexao/backoff/alertas; `run_once` conecta, roda um ciclo e fecha (usado por `main.py --once` / backend Java) |
 | `src/radar/exceptions.py` | `ChromeNotConnectableError`, `AffiliateLinkNotFoundError` |
 | `scripts/inspect_offers.py` | Script manual pra recalibrar `selectors.py` (ML) quando o site mudar |
 | `scripts/inspect_shopee_offers.py` | Script manual pra recalibrar `selectors.py` (Shopee) quando o site mudar |
@@ -493,3 +499,71 @@ mesmo que o desconto mude.
   (ML + Shopee, `DRY_RUN=true`): Shopee zerou ofertas nesse ciclo
   (lentidao pontual de carregamento) sem impedir o ML de descobrir 44
   ofertas, enfileirar 39 e processar um lote de 6 normalmente.
+
+## 12. Backend Java (API HTTP, opcional)
+
+Adicionado em 2026-08-21 (`backend/`, Spring Boot 3 + Java 21 + Maven).
+Objetivo: controlar o motor Python via HTTP (disparar ciclo sob demanda
+escolhendo sites/quantidade/canal, consultar status/log, ler produtos ja
+capturados, mandar mensagem avulsa) sem reescrever scraping nenhum.
+
+**Decisao de arquitetura**: reimplementar Playwright + CDP + fallback de
+clipboard em Java nao compensava o esforco pro beneficio (o motor Python
+ja funciona, calibrado e validado — secoes 6/6b/6c/11). Em vez disso, o
+backend gerencia o processo Python como subprocess (`ProcessBuilder`) e
+le diretamente o SQLite que o Python ja escreve. Ele nunca abre Chrome,
+nunca fala com Playwright, nunca escreve no SQLite — so orquestra e le.
+
+**Mudancas no lado Python pra viabilizar isso** (mantendo 100% do
+comportamento anterior quando chamado sem args):
+- `scheduler.run_once(settings, sites)` — extraido de `run_forever`:
+  conecta ao Chrome, roda um `run_all_sites` e fecha, sem loop. Usado
+  quando a API pede "1 ciclo agora" em vez de loop continuo.
+- `main.py` ganhou `argparse` opcional: `--sites ml,shopee,amazon|all`,
+  `--quantity N` (override de `MAX_PRODUCTS_PER_CYCLE` nessa execucao),
+  `--once` (chama `run_once` em vez de `run_forever`), `--channel
+  telegram|whatsapp` (`whatsapp` sai com erro — nao implementado),
+  `--message TEXTO` + `--chat-id ID` (atalho pra mandar uma mensagem
+  Telegram avulsa sem tocar em Chrome/scraping, via
+  `TelegramClient.send_message`, novo metodo). Sem nenhum desses args,
+  `main.py` continua identico a antes (prompt interativo + loop).
+
+**Por que 1-ciclo-por-chamada, nao loop controlado pela API**: decisao
+tomada com o usuario — mais simples de raciocinar (sem estado de
+"processo de longa duracao gerenciado por outro processo"), sem
+diferenca pratica de throughput (quem quiser recorrencia so chama a API
+nesse intervalo por fora, ex.: cron/scheduler).
+
+**Endpoints** (documentados via springdoc-openapi, Swagger UI em
+`/swagger-ui/index.html`, `/` redireciona pra la):
+- `POST /api/radar/run` — `{sites, quantity, channel}` -> dispara `main.py
+  --once` com esses args; 202 (RUNNING), 409 se ja tem execucao em
+  andamento, 400 se `channel=WHATSAPP`.
+- `GET /api/radar/status` — estado (`IDLE/RUNNING/COMPLETED/FAILED/STOPPED`),
+  timestamps, exit code, ultimas linhas do log do subprocesso.
+- `POST /api/radar/stop` — mata o subprocess em andamento.
+- `GET /api/products/recent` — le `posted_products` (SQLite), mais
+  recentes primeiro; `inferredSource` vem do prefixo real do
+  `product_id` gravado (`"site:id"`, ver secao 7), nao e heuristica.
+- `GET /api/products/queue-stats` — `offer_queue` agrupado por
+  site/status (pending/done/failed).
+- `POST /api/telegram/message` — `{text, chatId?}` -> roda `main.py
+  --message` sincrono (timeout 60s, cobrindo os 3 retries com backoff
+  do `TelegramClient`); 502 se o envio falhar.
+
+**Limitacao conhecida**: no maximo 1 execucao de scraping por vez (o
+SQLite de fila/dedup nao foi desenhado pra duas instancias do Python
+escrevendo ao mesmo tempo) — `RadarProcessService` (Java) garante isso
+com um `ExecutorService` single-thread e checagem de estado antes de
+iniciar um novo `run`. `/api/telegram/message` e independente disso (nao
+mexe no SQLite nem no Chrome), pode rodar mesmo com um ciclo de scraping
+em andamento.
+
+**Validado em 2026-08-21/22**: ciclo real disparado via
+`POST /api/radar/run` (`sites=[ML]`, `DRY_RUN=true` no teste, depois
+`DRY_RUN=false` em producao com `--sites all --once` direto) — Chrome de
+debug com profile persistente (`ChromeDebugProfile`, ver README secao 1),
+ciclo `COMPLETED` com exit 0, produtos reais lidos de volta via
+`GET /api/products/recent`. `POST /api/telegram/message` validado com
+envio real (200) e com texto vazio (400). `POST /api/radar/run` com
+`channel=WHATSAPP` validado retornando 400 sem subir processo nenhum.
