@@ -12,6 +12,11 @@ __pycache__/
 data/
 logs/
 
+# Sessao MTProto (Telethon) - equivale a credencial de login
+telethon_session/
+*.session
+*.session-journal
+
 # Backend Java
 backend/target/
 backend/logs/

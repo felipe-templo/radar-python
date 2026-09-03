@@ -4,3 +4,5 @@ requests>=2.32
 tenacity>=8.5
 pyperclip>=1.9
 customtkinter>=5.2
+telethon>=1.36
+phonenumbers>=8.13

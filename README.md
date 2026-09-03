@@ -200,6 +200,65 @@ funcionar no ciclo seguinte, sem precisar reiniciar `main.py`.
 pytest
 ```
 
+## Ponte WhatsApp -> Telegram (`bridge.py`)
+
+Rotina separada do radar de ofertas: extrai os participantes visiveis de um
+grupo do WhatsApp Web e, apos confirmacao manual, adiciona ao grupo do
+Telegram os que tiverem conta localizavel por telefone.
+
+### Pre-requisitos
+
+1. **Credenciais MTProto** (conta pessoal, nao o bot): pegue `API_ID` e
+   `API_HASH` em https://my.telegram.org -> API Development Tools e preencha
+   `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` e `TELEGRAM_TARGET_GROUP_ID` no `.env`.
+   O `TELEGRAM_BOT_TOKEN` **nao serve** aqui: a Bot API nao resolve telefone
+   nem adiciona membro arbitrario a um grupo.
+2. **Login unico da sessao Telethon** (pede telefone + codigo):
+   ```powershell
+   python scripts/telethon_login.py
+   ```
+   A sessao fica em `telethon_session/` (git-ignorada, equivale a credencial
+   de login — nunca commitar).
+3. **WhatsApp Web pronto**: no Chrome com debug port, abra `web.whatsapp.com`
+   logado, entre no grupo, clique no nome do grupo para abrir "Dados do grupo"
+   e, se o grupo for grande, clique em "Ver tudo" na lista de membros.
+
+### Rodar
+
+```powershell
+python bridge.py
+```
+
+O fluxo pede confirmacao em dois pontos: antes de consultar o Telegram e
+antes de qualquer adicao. Ctrl+C a qualquer momento e seguro — cada etapa e
+persistida em `data/bridge.db` antes de avancar, entao rodar de novo retoma
+sem repetir trabalho.
+
+### Limites de seguranca (`.env`)
+
+| Variavel | Padrao | Para que serve |
+|---|---|---|
+| `BRIDGE_DRY_RUN` | `true` | Simula as adicoes sem tocar no Telegram |
+| `MAX_ADDS_PER_RUN` | `20` | Teto de adicoes por execucao |
+| `MAX_TOTAL_ADDS` | `1000` | Teto vitalicio acumulado (conta `add_attempts` com sucesso) |
+| `MIN/MAX_DELAY_BETWEEN_ADDS_SECONDS` | `45`/`90` | Pausa aleatoria entre adicoes |
+| `FLOODWAIT_AUTO_SLEEP_MAX_SECONDS` | `120` | Acima disso, aborta em vez de esperar |
+
+### O que esperar na pratica
+
+- Nem todo numero do WhatsApp tem Telegram: a busca so acha quem tem conta
+  vinculada aquele numero **e** permite ser encontrado por telefone. Em grupos
+  de promocao a taxa costuma ser muito baixa (em um teste real: 1 encontrado
+  em 372 numeros escaneados).
+- `contacts.importContacts` e a mesma chamada que o app oficial usa ao
+  sincronizar a agenda — o efeito colateral e que voce pode aparecer como
+  sugestao de contato para a pessoa.
+- Mesmo com a conta resolvida, a adicao pode falhar por privacidade
+  (`PrivacyRestricted`): a pessoa restringiu quem pode adiciona-la a grupos.
+- `PeerFloodError` para tudo imediatamente e **nao** e retentado
+  automaticamente — e o aviso do Telegram de que a conta foi sinalizada por
+  comportamento tipo spam.
+
 ## Estrutura
 
 ```
@@ -221,9 +280,19 @@ src/radar/
   queue_repo.py                 fila compartilhada entre sites (SQLite)
   pipeline.py                   descoberta + processamento da fila
   scheduler.py                  loop continuo com retry/backoff
+  bridge/config.py              configuracao da ponte WhatsApp -> Telegram
+  bridge/whatsapp_scraper.py    extracao de participantes de grupo (Playwright)
+  bridge/normalize.py           normalizacao E.164 + deduplicacao
+  bridge/repository.py          contatos/resolucoes/tentativas (SQLite)
+  bridge/telegram_resolver.py   telefone -> conta Telegram (MTProto)
+  bridge/telegram_inviter.py    adicao ao grupo + FloodWait/PeerFlood
+  bridge/cli.py                 fluxo interativo com confirmacoes
+bridge.py                          entrypoint da ponte WhatsApp -> Telegram
 scripts/inspect_offers.py          calibracao manual de seletores (ML)
 scripts/inspect_shopee_offers.py   calibracao manual de seletores (Shopee)
 scripts/inspect_amazon_offers.py   calibracao manual de seletores (Amazon)
+scripts/inspect_whatsapp.py        calibracao manual de seletores (WhatsApp Web)
+scripts/telethon_login.py          login unico da sessao MTProto
 backend/                           API HTTP (Spring Boot) que controla main.py como subprocesso — ver backend/README.md
 SPEC.md                            especificacao completa do app (arquitetura, fluxo, riscos)
 ```
