@@ -84,28 +84,52 @@ Edite `.env` com:
   da pagina de ofertas de cada site, ja vem com um default sensato em
   `.env.example`.
 
-## 4. Seletores (ja calibrados, so mexer se o site mudar)
+## 4. Seletores e scripts de link de afiliado (ja calibrados, so mexer se o site mudar)
 
 `src/radar/selectors.py` ja esta calibrado contra o DOM real dos 3 sites
-(ultima calibracao: ML 2026-08-18, Shopee e Amazon 2026-08-19). Se um
-site mudar de layout e o bot comecar a extrair 0 ofertas ou nao achar o
-link de afiliado, recalibre com o Chrome debug aberto, logado no site em
-questao:
+(ultima calibracao: ML 2026-08-18, Shopee e Amazon 2026-08-19). Existe um
+script isolado por site pra testar a captura de ofertas e a resolucao do
+link de afiliado sem rodar o bot inteiro — util quando um site muda de
+layout e o bot comeca a extrair 0 ofertas ou nao acha mais o link.
 
-```powershell
-python scripts/inspect_offers.py           # Mercado Livre
-python scripts/inspect_shopee_offers.py    # Shopee
-python scripts/inspect_amazon_offers.py    # Amazon
-```
+### Passo a passo (terminal integrado do VS Code)
 
-Cada script imprime quantos cards foram encontrados e os dados dos
-primeiros produtos; passando um ID de produto como argumento (ver
-docstring de cada script), testa tambem a resolucao do link de afiliado
-daquele produto especifico. Se vier "NAO ENCONTRADO" ou contagem 0, abra o
-DevTools do proprio Chrome (F12) na pagina de ofertas e no botao/fluxo de
-afiliado do produto, inspecione os elementos reais e ajuste as constantes
-em `selectors.py` (detalhes de cada seletor e por que ele existe estao
-documentados em `SPEC.md`, secoes 6/6b/6c).
+1. Abra o Chrome com debug port (secao 1 acima) e faca login manualmente
+   no site que vai testar (ML, Shopee + portal de afiliados, ou Amazon +
+   Associates). Deixe essa janela aberta.
+2. No VS Code, abra um terminal integrado (`` Ctrl+` ``) na raiz do
+   projeto e ative o venv, se ainda nao estiver ativo:
+   ```powershell
+   .venv\Scripts\activate
+   ```
+3. Rode o script do site que quer testar:
+   ```powershell
+   python scripts/inspect_offers.py           # Mercado Livre
+   python scripts/inspect_shopee_offers.py    # Shopee
+   python scripts/inspect_amazon_offers.py    # Amazon
+   ```
+   Cada um imprime quantas ofertas foram encontradas na pagina e os
+   dados dos 10 primeiros produtos (desconto, preco, nome, URL).
+4. (Opcional) Pra testar tambem a resolucao do link de afiliado de um
+   produto especifico, rode de novo passando um ID como argumento:
+   ```powershell
+   python scripts/inspect_shopee_offers.py 123456789        # item_id: numero apos o ultimo ponto na URL do produto (shopee.com.br/produto-i.123.456789)
+   python scripts/inspect_amazon_offers.py B08N5WRWNW       # ASIN: 10 caracteres apos "/dp/" na URL do produto
+   ```
+   (`inspect_offers.py` do ML nao aceita argumento — so lista as ofertas
+   da pagina.)
+5. Leia a saida:
+   - `N ofertas encontradas` com N > 0 e itens listados: extracao de
+     ofertas OK.
+   - `Link de afiliado obtido: <url>`: fluxo de afiliado OK pra aquele
+     produto.
+   - `FALHOU: ...` ou contagem 0: algo no DOM mudou.
+6. Se falhou, abra o DevTools do proprio Chrome (F12) na pagina de
+   ofertas e no botao/fluxo de afiliado do produto, inspecione os
+   elementos reais e ajuste as constantes correspondentes em
+   `src/radar/selectors.py` (detalhes de cada seletor e por que ele
+   existe estao documentados em `SPEC.md`, secoes 6/6b/6c). Rode o
+   script de novo ate a saida vir limpa.
 
 ## 5. Testar sem postar de verdade
 
