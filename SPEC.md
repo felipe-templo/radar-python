@@ -331,6 +331,48 @@ Calibrado e validado de ponta a ponta contra o DOM real em 2026-08-19
 como `product_id` (chave de dedup `"amazon:{ASIN}"`, mesmo esquema de
 prefixo por site da secao 7).
 
+## 6d. Como rodar os scripts de link de afiliado (recalibracao manual)
+
+Os 3 scripts em `scripts/` exercitam o codigo das secoes 6/6b/6c acima
+contra o DOM real, sem rodar o pipeline inteiro (sem postar no
+Telegram, sem tocar `posted_products.db`). Passo a passo:
+
+1. Abra o Chrome com debug port (README secao 1) e logue manualmente no
+   site em questao: ML normal; Shopee + portal de afiliados
+   (`affiliate.shopee.com.br`); Amazon + Amazon Associates ativo (sem
+   Associates a SiteStripe da secao 6c nao aparece).
+2. No terminal (venv ativado), rode so a listagem de ofertas:
+   ```powershell
+   python scripts/inspect_offers.py           # ML -> OffersPageSelectors
+   python scripts/inspect_shopee_offers.py    # Shopee -> shopee_offers_page.list_offers
+   python scripts/inspect_amazon_offers.py    # Amazon -> amazon_offers_page.list_offers
+   ```
+   Cada um imprime a contagem de ofertas e os 10 primeiros produtos
+   (desconto/preco/nome/URL). Contagem 0 = seletor de card/preco/desconto
+   quebrou (secoes 4 e 6/6b/6c descrevem os seletores exatos).
+3. Pra exercitar tambem a captura do link de afiliado (secoes 6b/6c),
+   rode de novo passando um ID real de produto:
+   ```powershell
+   python scripts/inspect_shopee_offers.py <item_id>   # numero final da URL: shopee.com.br/produto-i.123.<item_id>
+   python scripts/inspect_amazon_offers.py <ASIN>       # 10 chars apos /dp/ na URL do produto
+   ```
+   `inspect_offers.py` (ML) nao tem esse modo — a captura de link do ML
+   (secao 6) so e exercitada pelo pipeline completo (`main.py` com
+   `DRY_RUN=true`), porque depende do fluxo Compartilhar dentro da propria
+   pagina de ofertas, nao de uma URL de produto avulsa.
+4. Resultado esperado: `Link de afiliado obtido: <url>` batendo com o
+   dominio confirmado em 6b/6c (`s.shopee.com.br` / `shope.ee` pra
+   Shopee, `link.amazon/...` / `amzn.to` pra Amazon). `FALHOU:
+   AffiliateLinkNotFoundError` indica que uma das camadas de extracao
+   (textarea/href/clipboard) descritas em 6/6b/6c parou de bater com o
+   DOM real.
+5. Se algo quebrou, abra o DevTools (F12) no elemento real (botao/popup/
+   modal do fluxo de afiliado) e ajuste o seletor correspondente em
+   `src/radar/selectors.py`; se a estrutura do popup/modal mudou (nao so
+   o seletor), ajuste tambem o parsing em `scraper/*_affiliate.py` ou
+   `scraper/*_offers_page.py` conforme o caso, atualizando a secao
+   6/6b/6c correspondente com a nova data de calibracao.
+
 ## 7. Deduplicacao
 
 SQLite (`data/posted_products.db`), tabela `posted_products` com
