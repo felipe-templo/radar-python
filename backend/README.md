@@ -36,3 +36,30 @@ Config em `src/main/resources/application.yml` (override via env vars `RADAR_PYT
   { "text": "<b>Aviso</b>: manutencao as 22h", "chatId": null }
   ```
   `chatId` opcional (default `TELEGRAM_CHAT_ID` do `.env`). Retorna 200, 400 (texto vazio) ou 502 (falha ao enviar).
+
+## Troubleshooting: `POST /api/radar/run` falha ou volta 0 produtos
+
+Esse endpoint so dispara `main.py` (mesmo scraper Python das secoes
+anteriores) como subprocesso — se ele falhar (`GET /api/radar/status`
+com `FAILED`) ou terminar sem capturar produto nenhum pro site pedido,
+o problema esta no scraper Python, nao no backend Java. Nesse caso a API
+nao ajuda a diagnosticar; teste o site direto com os scripts isolados do
+`radar-python` (passo a passo completo no
+[`README.md`](../README.md#4-seletores-e-scripts-de-link-de-afiliado-ja-calibrados-so-mexer-se-o-site-mudar)
+da raiz):
+
+1. Chrome com debug port aberto (mesmo requisito de cima), logado no
+   site em questao (Shopee: tambem no portal de afiliados; Amazon:
+   tambem com Amazon Associates ativo).
+2. No terminal, na raiz do `radar-python` (nao em `backend/`), com o
+   venv Python ativado:
+   ```powershell
+   python scripts/inspect_offers.py           # Mercado Livre
+   python scripts/inspect_shopee_offers.py    # Shopee
+   python scripts/inspect_amazon_offers.py    # Amazon
+   ```
+3. Contagem 0 ofertas ou `FALHOU: AffiliateLinkNotFoundError` confirma
+   que um seletor quebrou (site mudou de layout) — ajuste
+   `src/radar/selectors.py` conforme `SPEC.md` secoes 6/6b/6c/6d, rode o
+   script de novo ate a saida vir limpa, e so entao dispare
+   `POST /api/radar/run` de novo.
